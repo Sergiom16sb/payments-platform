@@ -32,21 +32,14 @@ export default [
         {
           patterns: [
             {
-              group: ['../*', './*'],
+              group: ['../*'],
               message:
-                'Use the @/* alias instead of relative imports. ESLint rule will auto-fix this.',
+                'Do not use parent relative imports (../). Use the @/* alias instead.',
             },
           ],
         },
       ],
-      'import/order': [
-        'error',
-        {
-          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-          'newlines-between': 'always',
-          alphabetize: { order: 'asc', caseInsensitive: true },
-        },
-      ],
+      'import/order': 'off',
     },
   },
   {
