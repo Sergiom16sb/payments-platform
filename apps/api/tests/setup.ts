@@ -1,5 +1,5 @@
 import { afterEach, beforeEach } from 'vitest';
-import { buildApp, type BuildAppOptions } from '@/app.js';
+import { type BuildAppOptions, buildApp } from '@/app.js';
 
 export interface TestContext {
   app: Awaited<ReturnType<typeof buildApp>>;
