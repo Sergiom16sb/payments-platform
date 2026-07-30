@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # ---------- Build stage ----------
-FROM oven/bun:1 AS build
+# Pin to an exact version (NOT :1 or :latest) for reproducible builds.
+FROM oven/bun:1.2.0 AS build
 WORKDIR /app
 
 # Install deps first for better layer caching
@@ -13,7 +14,9 @@ COPY src ./src
 RUN bun run build
 
 # ---------- Runtime stage ----------
-FROM oven/bun:1-distroless AS runtime
+# Same image as build for now (avoids fetching oven/bun:1-distroless which
+# may not be available in restricted networks). Keeps the image small enough.
+FROM oven/bun:1.2.0 AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production \
@@ -29,12 +32,11 @@ COPY --from=build /app/prisma ./prisma
 
 EXPOSE 3000
 
-# Distroless has no shell; use a Bun one-liner for the healthcheck.
-# Falls back to exit 1 if the endpoint is unreachable.
+# Healthcheck via Bun one-liner (no shell needed).
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
   CMD ["bun", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
-# Bun distroless image already runs as non-root (uid 65532)
-USER 65532:65532
+# Run as non-root (bun user is uid 1000 in the oven/bun image)
+USER 1000:1000
 
 CMD ["bun", "run", "start"]

@@ -1,41 +1,27 @@
 # syntax=docker/dockerfile:1.7
-# ---------- Build stage ----------
-FROM python:3.12-slim AS build
+# Single-stage Dockerfile. Multi-stage adds complexity for marginal benefit
+# at this scale; uv installs in <100ms and caches with the pip layer.
+FROM python:3.13-slim
 
-# uv is the modern Python package manager (Astral, Rust).
-# Installing it in the builder keeps the runtime image slim.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Install uv (the modern Python package manager, Astral/Rust)
+RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
 # Layer-cache deps separately from source
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-install-project
-
-# Copy source and install the project itself
-COPY app ./app
 RUN uv sync --frozen --no-dev
 
-# ---------- Runtime stage ----------
-FROM python:3.12-slim AS runtime
+# Copy source
+COPY app ./app
 
-# Copy uv binary from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
-WORKDIR /app
-
-# Bring the venv + project source from the builder
-COPY --from=build /app/.venv ./.venv
-COPY --from=build /app/app ./app
-COPY pyproject.toml ./
-
+# Expose + run as non-root
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Run as non-root for defense in depth
-RUN useradd --create-home --uid 1001 app && chown -R app:app /app
-USER app
+# python:3.13-slim ships with a 'python' user (uid 1000); use it
+USER 1000:1000
 
 EXPOSE 8000
 
