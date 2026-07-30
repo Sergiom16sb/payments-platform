@@ -1,41 +1,24 @@
 # syntax=docker/dockerfile:1.7
-# ---------- Build stage ----------
-FROM python:3.12-slim AS build
+# Single-stage Dockerfile using the official uv image with Python 3.13 baked in.
+# The image is larger than the distroless variant (~256MB vs ~78MB) but means
+# one FROM line, no COPY --from, and no need to keep the distroless image in sync.
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
-# uv is the modern Python package manager (Astral, Rust).
-# Installing it in the builder keeps the runtime image slim.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+ENV UV_PYTHON_DOWNLOADS=0 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
 # Layer-cache deps separately from source
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
-# Copy source and install the project itself
 COPY app ./app
-RUN uv sync --frozen --no-dev
 
-# ---------- Runtime stage ----------
-FROM python:3.12-slim AS runtime
-
-# Copy uv binary from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
-WORKDIR /app
-
-# Bring the venv + project source from the builder
-COPY --from=build /app/.venv ./.venv
-COPY --from=build /app/app ./app
-COPY pyproject.toml ./
-
-ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
-
-# Run as non-root for defense in depth
-RUN useradd --create-home --uid 1001 app && chown -R app:app /app
-USER app
+# python user (uid 1000) is already in the base image
+USER 1000:1000
 
 EXPOSE 8000
 
