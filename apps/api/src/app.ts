@@ -17,6 +17,7 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { getEnv } from './config/env.js';
+import { registerErrorHandler } from './plugins/error-handler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -98,6 +99,11 @@ export async function buildApp(
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  // Register the error handler on the root instance BEFORE any plugin
+  // creates an encapsulation context, so it applies to ALL routes —
+  // including those added later by autoload and tests.
+  registerErrorHandler(app);
 
   await app.register(registerPlugins);
   await app.register(registerAppPlugins);
