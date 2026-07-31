@@ -21,6 +21,7 @@ import { registerErrorHandler } from './plugins/error-handler.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { cardsRoutes } from './routes/cards.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
+import { paymentsRoutes } from './routes/payments.routes.js';
 
 export interface BuildAppOptions {
   logger?: boolean | object;
@@ -112,6 +113,7 @@ export async function buildApp(
   await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(cardsRoutes, { prefix: '/api/cards' });
+  await app.register(paymentsRoutes, { prefix: '/api' });
 
   return app;
 }
