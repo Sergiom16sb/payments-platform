@@ -125,7 +125,7 @@ Each PR adds new functionality. This runbook will get new sections as we land:
 |---|---|---|
 | #6 | `feat/db-schema` | `## Database operations` — `prisma migrate`, `prisma studio`, `prisma db seed` |
 | #7 | `feat/api-foundation` | (covered above in `## 3. API Foundation Smoke Test`) |
-| #8 | `feat/api-auth` | `## 5. Auth smoke tests` — register, login, refresh, logout via curl |
+| #8 | `feat/api-auth` | (covered below in `## 4. Auth smoke tests`) |
 | #9 | `feat/processor-fastapi` | `## 6. Processor smoke tests` — start FastAPI service, hit `POST /process` |
 | #10 | `feat/api-cards` | `## 7. Card tokenization smoke tests` |
 | #11 | `feat/api-payments` | `## 8. Payment flow smoke tests` — including idempotency |
@@ -237,7 +237,127 @@ If any probe above fails, check the corresponding troubleshooting entry in secti
 
 ---
 
-## 4. Conventions
+## 4. Auth smoke tests (works after PR #8 `feat/api-auth`)
+
+PR #8 adds the `/api/auth/*` endpoints (register, login, refresh, logout). With postgres up and the API booted, you can exercise the full flow with curl.
+
+### 4.1 Boot
+
+```bash
+docker compose up -d postgres
+cd apps/api
+bun install
+bun run dev
+```
+
+### 4.2 Register a user
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","name":"Alice","password":"Secret123"}'
+# Expected: HTTP/1.1 201 Created
+# {
+#   "user": { "id": "cm...", "email": "alice@example.com", "name": "Alice",
+#             "role": "USER", "createdAt": "..." },
+#   "accessToken": "eyJ...",
+#   "refreshToken": "eyJ...",
+#   "accessTokenExpiresIn": "15m",
+#   "refreshTokenExpiresIn": "7d"
+# }
+# Set-Cookie: refresh_token=eyJ...; HttpOnly; SameSite=Lax; Path=/api/auth
+```
+
+Save the `refreshToken` for the next steps, or just reuse the cookie.
+
+### 4.3 Login (proves wrong password returns 401, not 404)
+
+```bash
+# Correct password
+curl -i -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","password":"Secret123"}'
+# Expected: 200 + tokens
+
+# Wrong password
+curl -i -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","password":"WrongPass1"}'
+# Expected: 401
+# { "success": false, "error": { "message": "Invalid email or password",
+#                                 "code": "INVALID_CREDENTIALS" } }
+# (same code/message as a missing email — no account enumeration)
+```
+
+### 4.4 Refresh (token rotation + reuse detection)
+
+```bash
+# Use the cookie from step 4.2
+curl -i -X POST http://localhost:3000/api/auth/refresh \
+  -H "Cookie: refresh_token=<paste from set-cookie above>"
+# Expected: 200 + a NEW refresh token (different from the one issued at register)
+
+# Reusing the original refresh token now returns 401 (reuse detection)
+curl -i -X POST http://localhost:3000/api/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<original token>"}'
+# Expected: 401 { error: { code: "REVOKED_REFRESH" } }
+```
+
+### 4.5 Logout (idempotent)
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<current token>"}'
+# Expected: 204 No Content (and the refresh_token cookie is cleared)
+
+# Subsequent refresh with the same token -> 401
+```
+
+### 4.6 Weak password rejection (Zod schema)
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bob@example.com","name":"Bob","password":"weak"}'
+# Expected: 400
+# { "success": false, "error": {
+#     "code": "VALIDATION_ERROR",
+#     "fields": [{ "path": "password", "message": "..." }]
+# } }
+```
+
+### 4.7 Duplicate email rejection
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","name":"Alice2","password":"Secret456"}'
+# Expected: 409
+# { "success": false, "error": { "message": "Email is already registered",
+#                                 "code": "EMAIL_TAKEN" } }
+```
+
+### 4.8 Quality gates
+
+```bash
+cd apps/api
+bun run typecheck   # clean
+bun run lint        # clean
+bun run format:check
+bun run test        # 63 tests passing
+```
+
+### 4.9 What's not yet wired
+
+- No `/api/users/me` or PATCH/DELETE — those come with a separate user-management PR or stay out of scope per the PDF.
+- No protected routes require an access token yet — that's PR #9+ (cards/payments add `Authorization: Bearer` enforcement).
+- The refresh cookie is `httpOnly` + `SameSite=Lax` but `secure: false` in dev. Production builds set `secure: true` automatically when `NODE_ENV=production`.
+
+---
+
+## 5. Conventions
 
 - **All commits** use [Conventional Commits](https://www.conventionalcommits.org/) in English. No `Co-Authored-By`.
 - **One PR per branch**, squash-merged to `main`. PR description follows the `What / Why / How to test / Checklist / Refs / Commits` template.
