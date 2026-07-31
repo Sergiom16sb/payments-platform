@@ -16,8 +16,10 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { getEnv } from './config/env.js';
+import authGuardPlugin from './plugins/auth-guard.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
 import { authRoutes } from './routes/auth.routes.js';
+import { cardsRoutes } from './routes/cards.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 
 export interface BuildAppOptions {
@@ -100,10 +102,16 @@ export async function buildApp(
 
   await app.register(registerPlugins);
 
+  // auth-guard exposes `app.authenticate` (a preHandler that verifies
+  // the Bearer JWT) on the root instance. Registered directly (not
+  // inside registerPlugins) so the decoration is visible everywhere.
+  await app.register(authGuardPlugin);
+
   // Domain routes (registered manually rather than via @fastify/autoload
   // so we don't depend on directory contents that may be empty).
   await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(cardsRoutes, { prefix: '/api/cards' });
 
   return app;
 }
