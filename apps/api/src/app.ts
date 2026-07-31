@@ -18,6 +18,7 @@ import {
 import { getEnv } from './config/env.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
 import { authRoutes } from './routes/auth.routes.js';
+import { healthRoutes } from './routes/health.routes.js';
 
 export interface BuildAppOptions {
   logger?: boolean | object;
@@ -101,6 +102,7 @@ export async function buildApp(
 
   // Domain routes (registered manually rather than via @fastify/autoload
   // so we don't depend on directory contents that may be empty).
+  await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
 
   return app;
