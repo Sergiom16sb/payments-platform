@@ -15,7 +15,14 @@
     "lint:fix": "biome check --write",
     "format": "biome format --write",
     "format:check": "biome format",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
     "prepare": "husky"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "lint-staged": {
     "*.{ts,js,json,md}": [
