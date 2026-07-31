@@ -4,7 +4,7 @@ import {
   PublicUserSchema,
   RegisterRequestSchema,
   TokenResponseSchema,
-} from '@/auth/schemas/auth.schemas.js';
+} from '@/dto/auth/auth.schemas.js';
 
 describe('auth schemas', () => {
   describe('RegisterRequestSchema', () => {

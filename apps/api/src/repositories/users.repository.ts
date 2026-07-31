@@ -1,10 +1,9 @@
 import type { PrismaClient, User } from '@prisma/client';
-import { getEnv } from '../../config/env.js';
 import {
   ConflictException,
   NotFoundException,
-} from '../../exceptions/index.js';
-import { getPrisma } from '../prisma.js';
+} from '../exceptions/index.js';
+import { getPrisma } from '../config/database.js';
 
 /**
  * Users repository. Wraps Prisma calls so services don't reach into the
@@ -108,6 +107,3 @@ export function getUsersRepository(): UsersRepository {
   _default = new UsersRepository();
   return _default;
 }
-
-// re-export env consumer so tree-shaking doesn't drop env validation
-export { getEnv };
