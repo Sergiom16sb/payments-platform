@@ -69,6 +69,14 @@ export { envSchema };
 let cached: Env | undefined;
 
 /**
+ * Test-only: clear the cached env so a new parse reflects changes to
+ * process.env. Never call from production code.
+ */
+export function _resetEnvCacheForTests(): void {
+  cached = undefined;
+}
+
+/**
  * Lazily validates and returns the process env. Called once at server boot
  * (from app.ts and server.ts), then memoized. Keeping it lazy means test
  * files can import schemas and types without triggering a hard exit when
