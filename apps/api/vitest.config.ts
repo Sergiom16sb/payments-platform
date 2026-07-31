@@ -10,6 +10,13 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
+    server: {
+      // Inline all deps so vite-node transforms them and handles
+      // NodeNext-style `.js` -> `.ts` import rewriting uniformly.
+      deps: {
+        inline: [/.*/],
+      },
+    },
   },
   resolve: {
     alias: {
