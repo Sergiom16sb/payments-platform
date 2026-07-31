@@ -1,5 +1,7 @@
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import swagger from '@fastify/swagger';
@@ -15,15 +17,13 @@ import {
 } from 'fastify-type-provider-zod';
 import { getEnv } from './config/env.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
+import { authRoutes } from './routes/auth.routes.js';
 
 export interface BuildAppOptions {
   logger?: boolean | object;
 }
 
 const registerPlugins: FastifyPluginAsync = async (app) => {
-  // Validate env once before registering any plugin that needs it.
-  const env = getEnv();
-
   // Sensible: default HTTP error helpers (httpErrors.notFound, etc.)
   await app.register(sensible);
 
@@ -33,7 +33,7 @@ const registerPlugins: FastifyPluginAsync = async (app) => {
 
   // CORS: env-driven whitelist. Empty list disables CORS entirely.
   await app.register(cors, {
-    origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : false,
+    origin: getEnv().CORS_ORIGINS.length > 0 ? getEnv().CORS_ORIGINS : false,
     credentials: true,
   });
 
@@ -84,11 +84,24 @@ export async function buildApp(
   // including those added later by tests and (in future PRs) domain routes.
   registerErrorHandler(app);
 
+  // Cookie parser + JWT MUST be registered on the root, not inside
+  // registerPlugins — otherwise the decoration (`reply.setCookie` and
+  // `request.jwtVerify`) is scoped to the child context and not visible
+  // to routes registered as siblings (auth.routes, future feature routes).
+  // Both plugins are fp()-wrapped internally so this works without
+  // breaking encapsulation.
+  const env = getEnv();
+  await app.register(cookie, {});
+  await app.register(jwt, {
+    secret: env.JWT_SECRET,
+    sign: { expiresIn: env.JWT_ACCESS_TOKEN_EXPIRES_IN },
+  });
+
   await app.register(registerPlugins);
 
-  // Domain routes (src/routes/) and per-feature plugins (src/plugins/) are
-  // wired by the first feature PR that adds them — keeping the foundation
-  // PR focused on infra and avoiding ENOENT from autoload on empty dirs.
+  // Domain routes (registered manually rather than via @fastify/autoload
+  // so we don't depend on directory contents that may be empty).
+  await app.register(authRoutes, { prefix: '/api/auth' });
 
   return app;
 }
