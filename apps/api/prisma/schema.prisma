@@ -1,0 +1,104 @@
+// Prisma schema for the payments-platform API.
+// Conventions (see PLAN.md §6):
+//   - PascalCase models, snake_case plural tables (via @@map).
+//   - IDs: cuid() (shorter than UUID, equally unique).
+//   - createdAt / updatedAt on every model.
+//   - Enums in UPPER_SNAKE_CASE.
+//   - Explicit indexes on FKs and frequent search fields.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CardBrand {
+  VISA
+  MASTERCARD
+  AMEX
+  UNKNOWN
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String // bcrypt hash; never store plaintext
+  role      String   @default("USER") // USER | ADMIN — kept as string to avoid enum migrations
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cards          Card[]
+  payments       Payment[]
+  refreshTokens  RefreshToken[]
+
+  @@map("users")
+  @@index([email])
+}
+
+model Card {
+  id             String    @id @default(cuid())
+  userId         String
+  brand          CardBrand @default(UNKNOWN)
+  last4          String // last 4 digits ONLY — full PAN is never persisted
+  expMonth       Int // 1..12
+  expYear        Int // 4-digit year
+  cardholderName String
+  token          String    @unique // opaque token returned at registration; replaces PAN
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@map("cards")
+  @@index([userId])
+  @@index([token])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  cardId          String
+  amount          Decimal       @db.Decimal(12, 2) // money in Decimal, NEVER Float
+  currency        String        @default("USD") @db.Char(3)
+  status          PaymentStatus @default(PENDING)
+  processorRef    String? // ID returned by the Python processor service
+  rejectionReason String? // populated when status = REJECTED
+  idempotencyKey  String        @unique // prevents duplicate charges on client retries
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@map("payments")
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+// Persisted refresh tokens (PLAN.md §9). Logout sets revokedAt; expired rows are
+// pruned by a periodic job (out of scope for this PR).
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique // SHA-256 of the raw token; raw value never persisted
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId])
+  @@index([expiresAt])
+}
