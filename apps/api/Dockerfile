@@ -4,8 +4,10 @@
 FROM oven/bun:1.2.0 AS build
 WORKDIR /app
 
-# Install deps first for better layer caching
+# Copy prisma schema BEFORE `bun install` so the @prisma/client postinstall
+# hook (`prisma generate`) can find schema.prisma and produce the typed client.
 COPY package.json bun.lock* ./
+COPY prisma ./prisma
 RUN bun install --frozen-lockfile
 
 # Copy source and build
