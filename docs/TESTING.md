@@ -128,7 +128,7 @@ Each PR adds new functionality. This runbook will get new sections as we land:
 | #8 | `feat/api-auth` | (covered below in `## 4. Auth smoke tests`) |
 | #9 | `feat/processor-fastapi` | (covered below in `## 5. Processor smoke tests`) |
 | #10 | `feat/api-cards` | (covered below in `## 6. Cards smoke tests`) |
-| #11 | `feat/api-payments` | `## 8. Payment flow smoke tests` — including idempotency |
+| #11 | `feat/api-payments` | (covered below in `## 7. Payment flow smoke tests`) |
 | #12 | `chore/docker-full-stack` | `## 9. Full stack via docker compose` |
 | #13 | `docs/readme-and-postman` | `## 10. Postman collection` |
 
@@ -556,7 +556,123 @@ bun run test        # 91 tests passing
 
 ---
 
-## 7. Conventions
+## 7. Payment flow smoke tests (works after PR #11 `feat/api-payments`)
+
+PR #11 adds `/api/payments` — the endpoint that ties the API, the card token, and the Python processor together. All routes require auth.
+
+### 7.1 Create a payment (happy path)
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"Secret123"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['accessToken'])")
+
+CARD_ID=$(curl -s http://localhost:3000/api/cards -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
+
+curl -i -X POST http://localhost:3000/api/payments \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"cardId\":\"$CARD_ID\",\"amount\":49.99}"
+# Expected APPROVED (~80% of the time):
+#   HTTP/1.1 201 Created
+#   { "id": "...", "status": "APPROVED", "processorRef": "<uuid4 hex>", ... }
+# Expected REJECTED (~20% of the time):
+#   HTTP/1.1 402 Payment Required
+#   { "success": false, "error": { "message": "Payment rejected: ...",
+#       "code": "PAYMENT_REJECTED", "details": { "payment": {...} } } }
+```
+
+### 7.2 Idempotency — same key, no double charge
+
+```bash
+KEY=$(python3 -c "import uuid; print(uuid.uuid4())")
+
+# First call creates the payment
+curl -s -X POST http://localhost:3000/api/payments \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"cardId\":\"$CARD_ID\",\"amount\":15,\"idempotencyKey\":\"$KEY\"}" \
+  | python3 -c "import json,sys; print('first id:', json.load(sys.stdin)['id'])"
+
+# Second call with the SAME key returns the SAME payment — the processor
+# is not called again (verify no duplicate row appears in payment history).
+curl -s -X POST http://localhost:3000/api/payments \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"cardId\":\"$CARD_ID\",\"amount\":15,\"idempotencyKey\":\"$KEY\"}" \
+  | python3 -c "import json,sys; print('second id:', json.load(sys.stdin)['id'])"
+# Expected: both ids are identical.
+```
+
+### 7.3 Ownership checks
+
+```bash
+# Using a card that belongs to another user -> 403
+curl -i -X POST http://localhost:3000/api/payments \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"cardId":"<someone-elses-card-id>","amount":5}'
+# Expected: 403 NOT_CARD_OWNER
+
+# Fetching someone else's payment -> 403
+curl -i http://localhost:3000/api/payments/<someone-elses-payment-id> \
+  -H "Authorization: Bearer $TOKEN"
+# Expected: 403 NOT_PAYMENT_OWNER
+
+# Listing someone else's history -> 403
+curl -i http://localhost:3000/api/users/<other-user-id>/payments \
+  -H "Authorization: Bearer $TOKEN"
+# Expected: 403 NOT_SELF
+```
+
+### 7.4 Payment history (paginated)
+
+```bash
+ME=$(curl -s http://localhost:3000/api/auth/login -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"Secret123"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['user']['id'])")
+
+curl -s "http://localhost:3000/api/users/$ME/payments?page=1&pageSize=10" \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+# Expected: { "data": [...], "meta": { "page": 1, "pageSize": 10, "total": N, "totalPages": ... } }
+
+# Filter by status
+curl -s "http://localhost:3000/api/users/$ME/payments?status=APPROVED" \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+### 7.5 Processor retry (manual — requires stopping the processor)
+
+To see the retry-with-backoff behavior live:
+1. Stop the processor container: `docker compose stop processor`
+2. Attempt a payment — the API will retry 3 times (200ms, 800ms, 3200ms delays) before returning 503.
+3. `docker compose start processor` to restore normal behavior.
+
+```bash
+curl -i -X POST http://localhost:3000/api/payments \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"cardId\":\"$CARD_ID\",\"amount\":5}"
+# Expected (processor down): ~4.2s total latency, then:
+#   HTTP/1.1 503 Service Unavailable
+#   { "error": { "code": "PROCESSOR_UNREACHABLE" } }
+```
+
+### 7.6 Quality gates
+
+```bash
+cd apps/api
+bun run typecheck && bun run lint && bun run format:check
+bun run test        # 126 tests passing
+```
+
+### 7.7 What's not yet wired
+
+- No admin bypass on `GET /api/users/:id/payments` — only the payment's own owner can list it. Admin routes are out of scope for this technical test.
+- No reconciliation job for PENDING payments that got stuck after a processor timeout — a client retry with the same idempotencyKey returns the PENDING row as-is; resolving it would need a background job.
+- Currency conversion is not implemented — `currency` on the payment must match what the processor expects (both default to USD).
+
+---
+
+## 8. Conventions
 
 - **All commits** use [Conventional Commits](https://www.conventionalcommits.org/) in English. No `Co-Authored-By`.
 - **One PR per branch**, squash-merged to `main`. PR description follows the `What / Why / How to test / Checklist / Refs / Commits` template.
