@@ -126,7 +126,7 @@ Each PR adds new functionality. This runbook will get new sections as we land:
 | #6 | `feat/db-schema` | `## Database operations` — `prisma migrate`, `prisma studio`, `prisma db seed` |
 | #7 | `feat/api-foundation` | (covered above in `## 3. API Foundation Smoke Test`) |
 | #8 | `feat/api-auth` | (covered below in `## 4. Auth smoke tests`) |
-| #9 | `feat/processor-fastapi` | `## 6. Processor smoke tests` — start FastAPI service, hit `POST /process` |
+| #9 | `feat/processor-fastapi` | (covered below in `## 5. Processor smoke tests`) |
 | #10 | `feat/api-cards` | `## 7. Card tokenization smoke tests` |
 | #11 | `feat/api-payments` | `## 8. Payment flow smoke tests` — including idempotency |
 | #12 | `chore/docker-full-stack` | `## 9. Full stack via docker compose` |
@@ -357,7 +357,108 @@ bun run test        # 63 tests passing
 
 ---
 
-## 5. Conventions
+## 5. Processor smoke tests (works after PR #9 `feat/processor-fastapi`)
+
+PR #9 adds `POST /process` (approve/reject decision) and expands `GET /health` on the Python processor service.
+
+### 5.1 Boot
+
+The processor runs as part of the full docker stack:
+
+```bash
+docker compose up -d processor
+# OR for the whole stack:
+docker compose up -d postgres processor
+```
+
+`processor` is independent — it doesn't need postgres. Healthy when `/health` returns 200.
+
+### 5.2 Health probe
+
+```bash
+curl -s http://localhost:8000/health | python3 -m json.tool
+# Expected:
+# {
+#   "status": "ok",
+#   "uptime": 42.3
+# }
+```
+
+### 5.3 Approve / reject decision
+
+```bash
+curl -s -X POST http://localhost:8000/process \
+  -H 'Content-Type: application/json' \
+  -d '{"paymentId":"p1","amount":"49.99","currency":"USD","cardToken":"tok_test"}' \
+  | python3 -m json.tool
+# Expected APPROVED ~80% of the time:
+# {
+#   "processorRef": "<uuid4 hex>",
+#   "status": "APPROVED",
+#   "reason": null
+# }
+# Expected REJECTED ~20% of the time:
+# {
+#   "processorRef": "<uuid4 hex>",
+#   "status": "REJECTED",
+#   "reason": "INSUFFICIENT_FUNDS" | "EXPIRED" | "FRAUD_SUSPECTED"
+# }
+```
+
+### 5.4 Validation errors (422)
+
+```bash
+# Lowercase currency
+curl -s -X POST http://localhost:8000/process \
+  -H 'Content-Type: application/json' \
+  -d '{"paymentId":"p","amount":"5","currency":"usd","cardToken":"t"}'
+# Expected: 422 (Pydantic rejects lowercase)
+
+# Zero amount
+curl -s -X POST http://localhost:8000/process \
+  -H 'Content-Type: application/json' \
+  -d '{"paymentId":"p","amount":"0","currency":"USD","cardToken":"t"}'
+# Expected: 422
+
+# Extra field
+curl -s -X POST http://localhost:8000/process \
+  -H 'Content-Type: application/json' \
+  -d '{"paymentId":"p","amount":"5","currency":"USD","cardToken":"t","sneaky":"x"}'
+# Expected: 422 (extra='forbid')
+```
+
+### 5.5 Configuring behavior
+
+All via env (read at startup, frozen in `app.config.settings`):
+
+| Env var | Default | Effect |
+|---|---|---|
+| `PROCESSOR_APPROVE_RATIO` | 0.8 | P(APPROVED). 0.0 → always reject, 1.0 → always approve. |
+| `PROCESSOR_MIN_LATENCY_MS` | 50 | Min simulated latency per call. |
+| `PROCESSOR_MAX_LATENCY_MS` | 200 | Max simulated latency per call. |
+| `PROCESSOR_ERROR_RATE` | 0.01 | P(503 per call). Used by the API client to test retry. |
+| `LOG_LEVEL` | info | Standard Python log level. |
+
+Override in docker-compose by adding to `processor.environment`, e.g. `PROCESSOR_APPROVE_RATIO=0.5` to force a 50/50 split for a manual test.
+
+### 5.6 Quality gates
+
+```bash
+cd apps/processor
+uv sync --frozen         # installs pinned deps
+uv run pytest -q         # 7 tests passing (distribution + validation + happy path)
+uv run ruff check        # static analysis (uses [tool.ruff.lint] from pyproject.toml)
+```
+
+### 5.7 What's not yet wired
+
+- The processor doesn't persist anything — every call is stateless, so the same `paymentId` can be re-processed (the API client is responsible for idempotency, PR #11).
+- No auth on `/process` — the docker network is the only access control. In a real deploy, both the API and processor would sit behind a private network and the processor would reject calls from outside.
+- No DB ping yet — `/health` only confirms the process is alive.
+
+---
+
+## 6. Conventions
 
 - **All commits** use [Conventional Commits](https://www.conventionalcommits.org/) in English. No `Co-Authored-By`.
 - **One PR per branch**, squash-merged to `main`. PR description follows the `What / Why / How to test / Checklist / Refs / Commits` template.
