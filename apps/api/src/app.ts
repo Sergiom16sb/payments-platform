@@ -16,6 +16,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import { getEnv } from './config/env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +25,9 @@ export interface BuildAppOptions {
 }
 
 const registerPlugins: FastifyPluginAsync = async (app) => {
+  // Validate env once before registering any plugin that needs it.
+  const env = getEnv();
+
   // Sensible: default HTTP error helpers (httpErrors.notFound, etc.)
   await app.register(sensible);
 
@@ -31,9 +35,11 @@ const registerPlugins: FastifyPluginAsync = async (app) => {
   // serves inline scripts that would otherwise need a per-route nonce.
   await app.register(helmet, { contentSecurityPolicy: false });
 
-  // CORS: whitelist driven by env in a later commit; default '*' for now
-  // so the API works out-of-the-box on a fresh clone.
-  await app.register(cors, { origin: true, credentials: true });
+  // CORS: env-driven whitelist. Empty list disables CORS entirely.
+  await app.register(cors, {
+    origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : false,
+    credentials: true,
+  });
 
   // Rate limit: global default; specific routes can override per-PR.
   await app.register(rateLimit, {

@@ -1,14 +1,14 @@
 import { buildApp } from './app.js';
-
-const PORT = Number(process.env.PORT ?? 3000);
-const HOST = process.env.HOST ?? '0.0.0.0';
+import { getEnv } from './config/env.js';
 
 async function main(): Promise<void> {
+  const env = getEnv();
+
   const app = await buildApp({
     logger: {
-      level: process.env.LOG_LEVEL ?? 'info',
+      level: env.LOG_LEVEL,
       transport:
-        process.env.NODE_ENV === 'production'
+        env.NODE_ENV === 'production'
           ? undefined
           : { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss.l' } },
     },
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
   });
 
   try {
-    await app.listen({ port: PORT, host: HOST });
+    await app.listen({ port: env.PORT, host: env.HOST });
   } catch (err) {
     app.log.fatal({ err }, 'failed to start');
     process.exit(1);
