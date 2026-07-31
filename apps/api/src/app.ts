@@ -1,6 +1,3 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import autoLoad from '@fastify/autoload';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -18,8 +15,6 @@ import {
 } from 'fastify-type-provider-zod';
 import { getEnv } from './config/env.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export interface BuildAppOptions {
   logger?: boolean | object;
@@ -74,22 +69,6 @@ const registerPlugins: FastifyPluginAsync = async (app) => {
   });
 };
 
-const registerAppPlugins: FastifyPluginAsync = async (app) => {
-  // Auto-load domain plugins (error handler, routes, etc.) from src/plugins/
-  // and src/routes/. Each plugin is a fastify-plugin-encapsulated module.
-  // Empty dirs are OK — autoLoad just no-ops until files appear in later PRs.
-  await app.register(autoLoad, {
-    dir: path.join(__dirname, 'plugins'),
-    forceESM: true,
-  });
-
-  await app.register(autoLoad, {
-    dir: path.join(__dirname, 'routes'),
-    forceESM: true,
-    options: { prefix: '/api' },
-  });
-};
-
 export async function buildApp(
   opts: BuildAppOptions = {}
 ): Promise<FastifyInstance> {
@@ -102,11 +81,14 @@ export async function buildApp(
 
   // Register the error handler on the root instance BEFORE any plugin
   // creates an encapsulation context, so it applies to ALL routes —
-  // including those added later by autoload and tests.
+  // including those added later by tests and (in future PRs) domain routes.
   registerErrorHandler(app);
 
   await app.register(registerPlugins);
-  await app.register(registerAppPlugins);
+
+  // Domain routes (src/routes/) and per-feature plugins (src/plugins/) are
+  // wired by the first feature PR that adds them — keeping the foundation
+  // PR focused on infra and avoiding ENOENT from autoload on empty dirs.
 
   return app;
 }
