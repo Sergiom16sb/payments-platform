@@ -1,9 +1,6 @@
 import type { PrismaClient, User } from '@prisma/client';
-import {
-  ConflictException,
-  NotFoundException,
-} from '../exceptions/index.js';
 import { getPrisma } from '../config/database.js';
+import { ConflictException, NotFoundException } from '../exceptions/index.js';
 
 /**
  * Users repository. Wraps Prisma calls so services don't reach into the
