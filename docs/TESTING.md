@@ -127,7 +127,7 @@ Each PR adds new functionality. This runbook will get new sections as we land:
 | #7 | `feat/api-foundation` | (covered above in `## 3. API Foundation Smoke Test`) |
 | #8 | `feat/api-auth` | (covered below in `## 4. Auth smoke tests`) |
 | #9 | `feat/processor-fastapi` | (covered below in `## 5. Processor smoke tests`) |
-| #10 | `feat/api-cards` | `## 7. Card tokenization smoke tests` |
+| #10 | `feat/api-cards` | (covered below in `## 6. Cards smoke tests`) |
 | #11 | `feat/api-payments` | `## 8. Payment flow smoke tests` — including idempotency |
 | #12 | `chore/docker-full-stack` | `## 9. Full stack via docker compose` |
 | #13 | `docs/readme-and-postman` | `## 10. Postman collection` |
@@ -458,7 +458,105 @@ uv run ruff check        # static analysis (uses [tool.ruff.lint] from pyproject
 
 ---
 
-## 6. Conventions
+## 6. Cards smoke tests (works after PR #10 `feat/api-cards`)
+
+PR #10 adds the `/api/cards` endpoints with **tokenization** — the API never stores the PAN or CVV; only an opaque token + last4 + brand survive in the database (PLAN §9).
+
+### 6.1 Register a card (requires auth)
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"Secret123"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['accessToken'])")
+
+curl -i -X POST http://localhost:3000/api/cards \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"pan":"4111111111111111","cvv":"123","expMonth":12,"expYear":2030,"cardholderName":"Alice Example"}'
+# Expected: HTTP/1.1 201 Created
+# {
+#   "id": "cms9a...",
+#   "brand": "VISA",
+#   "last4": "1111",
+#   "expMonth": 12,
+#   "expYear": 2030,
+#   "cardholderName": "Alice Example",
+#   "token": "tok_<48 hex chars>",
+#   "createdAt": "..."
+# }
+# Notice: NO 'pan', NO 'cvv' in the response.
+```
+
+### 6.2 Validation errors
+
+```bash
+# Bad Luhn (off-by-one)
+curl -i -X POST http://localhost:3000/api/cards \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"pan":"4111111111111112","cvv":"123","expMonth":12,"expYear":2030,"cardholderName":"x"}'
+# Expected: 400 { error: { code: "INVALID_PAN" } }
+
+# Expired
+curl -i -X POST http://localhost:3000/api/cards \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"pan":"4111111111111111","cvv":"123","expMonth":1,"expYear":2020,"cardholderName":"x"}'
+# Expected: 400 { error: { code: "CARD_EXPIRED" } }
+```
+
+### 6.3 List / get / delete
+
+```bash
+# List current user's cards
+curl -s http://localhost:3000/api/cards -H "Authorization: Bearer $TOKEN"
+# Expected: { success: true, data: [...] }
+
+# Get one (with ownership check)
+curl -i http://localhost:3000/api/cards/<id> -H "Authorization: Bearer $TOKEN"
+# Expected: 200 with the card | 403 NOT_CARD_OWNER if owned by another user | 400 CARD_NOT_FOUND
+
+# Delete
+curl -i -X DELETE http://localhost:3000/api/cards/<id> -H "Authorization: Bearer $TOKEN"
+# Expected: 204
+```
+
+### 6.4 Auth required
+
+```bash
+# Without the Bearer token, every cards endpoint returns 401.
+curl -i http://localhost:3000/api/cards
+# Expected: 401 { error: { code: "UNAUTHENTICATED" } }
+```
+
+### 6.5 Verify the DB never stored the PAN
+
+After registering a card, check the raw DB row. PAN/CVV columns **do not exist** in the schema (`apps/api/prisma/schema.prisma`) — only `last4` + `token` + brand + meta. Confirms the tokenization works:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d payments \
+  -c 'SELECT id, brand, "last4", "cardholderName", token FROM cards LIMIT 3;'
+# Expected: only those columns. No pan, no cvv.
+```
+
+### 6.6 Quality gates
+
+```bash
+cd apps/api
+bun run typecheck   # clean
+bun run lint        # clean
+bun run format:check
+bun run test        # 91 tests passing
+```
+
+### 6.7 What's not yet wired
+
+- The token is opaque but not encrypted at rest. For production, the column should be encrypted with a KMS key (out of scope for the technical test).
+- No "default card" or "set as primary" endpoint.
+- Cards are referenced by id in `/api/payments` (PR #11), not by token — the token is meant for the client-side API.
+
+---
+
+## 7. Conventions
 
 - **All commits** use [Conventional Commits](https://www.conventionalcommits.org/) in English. No `Co-Authored-By`.
 - **One PR per branch**, squash-merged to `main`. PR description follows the `What / Why / How to test / Checklist / Refs / Commits` template.
