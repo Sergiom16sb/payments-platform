@@ -56,6 +56,9 @@ model Card {
   token          String    @unique // opaque token returned at registration; replaces PAN
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime? // soft delete: row is hidden from the user but
+                       // remains in the DB so historical Payment rows
+                       // keep their cardId FK intact (onDelete: Restrict).
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   payments Payment[]
@@ -63,6 +66,7 @@ model Card {
   @@map("cards")
   @@index([userId])
   @@index([token])
+  @@index([userId, deletedAt])
 }
 
 model Payment {
