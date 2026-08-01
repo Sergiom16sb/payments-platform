@@ -17,7 +17,8 @@ jobs:
     name: API · lint + typecheck
     runs-on: ubuntu-latest
     defaults:
-      working-directory: apps/api
+      run:
+        working-directory: apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -32,7 +33,8 @@ jobs:
     name: API · vitest
     runs-on: ubuntu-latest
     defaults:
-      working-directory: apps/api
+      run:
+        working-directory: apps/api
     services:
       postgres:
         image: postgres:16-alpine
@@ -75,7 +77,8 @@ jobs:
     name: Processor · ruff + pytest
     runs-on: ubuntu-latest
     defaults:
-      working-directory: apps/processor
+      run:
+        working-directory: apps/processor
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
