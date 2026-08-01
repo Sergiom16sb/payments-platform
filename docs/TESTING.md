@@ -538,6 +538,31 @@ docker compose exec -T postgres psql -U postgres -d payments \
 # Expected: only those columns. No pan, no cvv.
 ```
 
+### 6.6 Soft delete (PR #13)
+
+The DELETE endpoint is now a **soft delete**: the row stays in the DB (with `deletedAt = now()`) but is hidden from all reads. This preserves the `Payment.cardId` FK so historical payment rows keep referencing the card after the user "deletes" it.
+
+```bash
+# Register a card (assumes $TOKEN and $CARD_ID from steps above)
+curl -s -X DELETE "http://localhost:3000/api/cards/$CARD_ID" -H "Authorization: Bearer $TOKEN"
+# Expected: 204 No Content
+
+# GET deleted card -> 404 CARD_NOT_FOUND
+curl -s -i "http://localhost:3000/api/cards/$CARD_ID" -H "Authorization: Bearer $TOKEN"
+# Expected: 404 + {"success":false,"error":{"message":"Card ... not found","code":"CARD_NOT_FOUND"}}
+
+# List shows 0 cards
+curl -s http://localhost:3000/api/cards -H "Authorization: Bearer $TOKEN" | jq 'length'
+# Expected: 0
+
+# DB still has the row, just marked
+docker compose exec -T postgres psql -U postgres -d payments \
+  -c "SELECT id, last4, \"deletedAt\" FROM cards WHERE id = '$CARD_ID';"
+# Expected: 1 row, deletedAt populated
+```
+
+An admin endpoint to restore soft-deleted cards is not exposed via HTTP in this PR — the repository has a `restore(id)` helper so a future admin route or batch job can clear `deletedAt`.
+
 ### 6.6 Quality gates
 
 ```bash
