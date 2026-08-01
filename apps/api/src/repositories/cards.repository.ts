@@ -46,6 +46,15 @@ export class CardsRepository {
     });
   }
 
+  /**
+   * Admin helper: find a card by id regardless of soft-delete state.
+   * Used by the admin-restore flow to look up rows that findById()
+   * would hide.
+   */
+  async findByIdIncludingDeleted(id: string): Promise<Card | null> {
+    return this.prisma.card.findUnique({ where: { id } });
+  }
+
   async findByToken(token: string): Promise<Card | null> {
     // Only ACTIVE cards may be charged via their token. A soft-deleted
     // card's token is no longer usable for new payments.

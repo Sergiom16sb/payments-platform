@@ -579,6 +579,40 @@ bun run test        # 91 tests passing
 - No "default card" or "set as primary" endpoint.
 - Cards are referenced by id in `/api/payments` (PR #11), not by token — the token is meant for the client-side API.
 
+### 6.7 Admin restore (PR #15)
+
+The soft-delete in §6.6 is reversible by an admin via a dedicated endpoint. Requires `role: ADMIN` on the JWT — the seed admin user (`admin@payments.local` / `Admin1234`) has it.
+
+```bash
+# Login as admin to get a token
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@payments.local","password":"Admin1234"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['accessToken'])")
+
+# Register a card as a regular user, then soft-delete it
+USER_TOKEN=...   # from the regular login in §6.1
+CARD_ID=$(curl -s -X POST http://localhost:3000/api/cards \
+  -H "Authorization: Bearer $USER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"pan":"4111111111111111","cvv":"123","expMonth":12,"expYear":2030,"cardholderName":"Recoverable"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+curl -s -X DELETE "http://localhost:3000/api/cards/$CARD_ID" -H "Authorization: Bearer $USER_TOKEN" > /dev/null
+
+# USER tries to restore -> 403 INSUFFICIENT_ROLE
+curl -s -i -X POST "http://localhost:3000/api/admin/cards/$CARD_ID/restore" \
+  -H "Authorization: Bearer $USER_TOKEN" | head -3
+# Expected: 403 + {"code":"INSUFFICIENT_ROLE"}
+
+# ADMIN restores -> 200 with the card
+curl -s -i -X POST "http://localhost:3000/api/admin/cards/$CARD_ID/restore" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | head -3
+# Expected: 200 + CardResponseSchema (deletedAt is null again)
+
+# After restore, the original owner can use the card again
+curl -s "http://localhost:3000/api/cards/$CARD_ID" -H "Authorization: Bearer $USER_TOKEN" | python3 -m json.tool
+# Expected: 200 OK
+```
+
 ---
 
 ## 7. Payment flow smoke tests (works after PR #11 `feat/api-payments`)
