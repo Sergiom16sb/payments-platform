@@ -22,10 +22,10 @@ from .schemas import (
     PaymentStatus,
     ProcessRequest,
     ProcessResponse,
-    RejectionReason,
+    RefundRejectionReason,
     RefundRequest,
     RefundResponse,
-    RefundRejectionReason,
+    RejectionReason,
 )
 
 
