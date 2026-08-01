@@ -120,6 +120,14 @@ Success responses return the resource directly (no wrapper).
 | GET | `/api/payments/:id` | — | 403 if owned by another user |
 | GET | `/api/users/:id/payments` | `?page&pageSize&status&from&to` | 200 `{data, meta}`. 403 if `:id` isn't the caller |
 
+### Refunds (`/api/payments/:id/refund`, `/api/payments/:id/refunds`, `/api/refunds/:id`) — requires Bearer auth
+
+| Method | Path | Body / Query | Notes |
+|---|---|---|---|
+| POST | `/api/payments/:id/refund` | `{amount?, reason?, idempotencyKey?}` | 201 APPROVED or REJECTED. `amount` defaults to the full remaining balance. Same `idempotencyKey` returns the same refund. Eligibility: APPROVED always, PENDING within `PAYMENT_PENDING_REFUND_WINDOW_MINUTES` (default 5), REJECTED never. 422 REFUND_EXCEEDS_REMAINING if the requested amount would push the cumulative refunds over the payment's total. |
+| GET | `/api/payments/:id/refunds` | — | 200 list of refunds for the payment |
+| GET | `/api/refunds/:id` | — | 200 single refund, owner-checked via the parent payment |
+
 ### Processor (separate service, port 8000) — no auth, internal only
 
 | Method | Path | Body | Notes |

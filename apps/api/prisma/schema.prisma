@@ -84,6 +84,7 @@ model Payment {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  refunds Refund[]
 
   @@map("payments")
   @@index([userId, createdAt])
@@ -105,4 +106,34 @@ model RefreshToken {
   @@map("refresh_tokens")
   @@index([userId])
   @@index([expiresAt])
+}
+
+// Refund of a Payment (PR #16). A payment can have multiple refunds
+// (partial refunds are allowed — `amount` defaults to the full
+// remaining refundable balance if omitted). `status` mirrors the
+// processor's state machine: PENDING (just created, processor hasn't
+// responded), APPROVED (processor returned a refundRef), REJECTED
+// (processor declined — the original charge is NOT reversed).
+//
+// `idempotencyKey` is the standard refund-side dedup key (the caller
+// supplies it; the API generates one if missing). On replay the same
+// row is returned — no double-refund.
+model Refund {
+  id                String        @id @default(cuid())
+  paymentId         String
+  amount            Decimal       @db.Decimal(12, 2) // refund amount, can be < payment.amount
+  currency          String        @default("USD") @db.Char(3)
+  status            PaymentStatus @default(PENDING) // reuse the payment status enum
+  reason            String?       // free-text, optional
+  processorRef      String?       // ID returned by the processor's /refund endpoint
+  rejectionReason   String?       // populated when status = REJECTED
+  idempotencyKey    String        @unique
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@map("refunds")
+  @@index([paymentId, createdAt])
+  @@index([status])
 }

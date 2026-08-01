@@ -8,6 +8,8 @@ Endpoints:
   GET  /health   -> 200 {status: ok, uptime}
   POST /process  -> 200 {processorRef, status, reason?}
                   -> 503 (occasional) to test retry
+  POST /refund   -> 200 {processorRef, status, reason?}
+                  -> 503 (occasional) to test retry
 """
 
 from __future__ import annotations
@@ -18,8 +20,8 @@ import time
 from fastapi import FastAPI
 
 from .config import settings
-from .processor import process_payment
-from .schemas import ProcessRequest, ProcessResponse
+from .processor import process_payment, process_refund
+from .schemas import ProcessRequest, ProcessResponse, RefundRequest, RefundResponse
 
 logging.basicConfig(
     level=settings.log_level.upper(),
@@ -53,3 +55,16 @@ async def process(req: ProcessRequest) -> ProcessResponse:
         req.currency,
     )
     return await process_payment(req)
+
+
+@app.post("/refund", response_model=RefundResponse)
+async def refund(req: RefundRequest) -> RefundResponse:
+    """Approve or reject a refund. Same behavior as /process but for refunds."""
+    logger.info(
+        "refund: refundId=%s paymentId=%s amount=%s currency=%s",
+        req.refundId,
+        req.paymentId,
+        req.amount,
+        req.currency,
+    )
+    return await process_refund(req)

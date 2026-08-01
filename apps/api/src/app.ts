@@ -24,6 +24,7 @@ import { authRoutes } from './routes/auth.routes.js';
 import { cardsRoutes } from './routes/cards.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { paymentsRoutes } from './routes/payments.routes.js';
+import refundsRoutes from './routes/refunds.routes.js';
 
 export interface BuildAppOptions {
   logger?: boolean | object;
@@ -120,6 +121,7 @@ export async function buildApp(
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(cardsRoutes, { prefix: '/api/cards' });
   await app.register(paymentsRoutes, { prefix: '/api' });
+  await app.register(refundsRoutes, { prefix: '/api' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
 
   return app;
