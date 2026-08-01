@@ -8,18 +8,18 @@ Response: processorRef (uuid4 hex), status (APPROVED|REJECTED),
 from __future__ import annotations
 
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class PaymentStatus(str, Enum):
+class PaymentStatus(StrEnum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
 
 
 # Rejection reasons per PLAN §8 (mirrors what Stripe-like processors return).
-class RejectionReason(str, Enum):
+class RejectionReason(StrEnum):
     INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS"
     EXPIRED = "EXPIRED"
     FRAUD_SUSPECTED = "FRAUD_SUSPECTED"
@@ -30,10 +30,10 @@ class ProcessRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    paymentId: str = Field(min_length=1, max_length=64)
+    paymentId: str = Field(min_length=1, max_length=64)  # noqa: N815
     amount: Decimal = Field(gt=Decimal("0"), max_digits=12, decimal_places=2)
     currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
-    cardToken: str = Field(min_length=1, max_length=128)
+    cardToken: str = Field(min_length=1, max_length=128)  # noqa: N815
 
 
 class ProcessResponse(BaseModel):
@@ -42,14 +42,14 @@ class ProcessResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    processorRef: str = Field(min_length=1)
+    processorRef: str = Field(min_length=1)  # noqa: N815
     status: PaymentStatus
     reason: RejectionReason | None = None
 
 
 # Reject reasons for /refund (a refund can be declined for different reasons
 # than the original charge).
-class RefundRejectionReason(str, Enum):
+class RefundRejectionReason(StrEnum):
     REFUND_WINDOW_EXPIRED = "REFUND_WINDOW_EXPIRED"
     ORIGINAL_NOT_FOUND = "ORIGINAL_NOT_FOUND"
 
@@ -61,8 +61,8 @@ class RefundRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    refundId: str = Field(min_length=1, max_length=64)
-    paymentId: str = Field(min_length=1, max_length=64)
+    refundId: str = Field(min_length=1, max_length=64)  # noqa: N815
+    paymentId: str = Field(min_length=1, max_length=64)  # noqa: N815
     amount: Decimal = Field(gt=Decimal("0"), max_digits=12, decimal_places=2)
     currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
 
@@ -73,6 +73,6 @@ class RefundResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    processorRef: str = Field(min_length=1)
+    processorRef: str = Field(min_length=1)  # noqa: N815
     status: PaymentStatus
     reason: RefundRejectionReason | None = None
