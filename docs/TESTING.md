@@ -129,6 +129,7 @@ Each PR adds new functionality. This runbook will get new sections as we land:
 | #9 | `feat/processor-fastapi` | (covered below in `## 5. Processor smoke tests`) |
 | #10 | `feat/api-cards` | (covered below in `## 6. Cards smoke tests`) |
 | #11 | `feat/api-payments` | (covered below in `## 7. Payment flow smoke tests`) |
+| #16 | `feat/api-payments-refund` | (covered below in `## 8. Refund flow smoke tests`) |
 | #12 | `chore/docker-full-stack` | `## 9. Full stack via docker compose` |
 | #13 | `docs/readme-and-postman` | `## 10. Postman collection` |
 
@@ -731,7 +732,122 @@ bun run test        # 126 tests passing
 
 ---
 
-## 8. Conventions
+## 8. Refund flow smoke tests (works after PR #16 `feat/api-payments-refund`)
+
+PR #16 adds refund support. A payment can have up to N partial refunds, and the sum of all PENDING + APPROVED refunds cannot exceed the payment's amount.
+
+### 8.1 Full refund of an APPROVED payment
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"Secret123"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['accessToken'])")
+
+ME=$(curl -s http://localhost:3000/api/auth/login -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"Secret123"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['user']['id'])")
+
+# Pick an existing APPROVED payment, or create one
+PAYMENT_ID=$(curl -s "http://localhost:3000/api/users/$ME/payments?status=APPROVED" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['data'][0]['id'])")
+
+curl -i -X POST "http://localhost:3000/api/payments/$PAYMENT_ID/refund" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{}'
+# Expected: 201 + RefundResponseSchema (status=APPROVED ~80%, REJECTED ~20%)
+```
+
+### 8.2 Partial refunds
+
+```bash
+curl -X POST "http://localhost:3000/api/payments/$PAYMENT_ID/refund" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"amount": 30}'
+# Expected: 201 (30.00)
+
+curl -X POST "http://localhost:3000/api/payments/$PAYMENT_ID/refund" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"amount": 70}'
+# Expected: 201 (70.00) — completes the full refund
+```
+
+### 8.3 Over-refund (422)
+
+```bash
+curl -X POST "http://localhost:3000/api/payments/$PAYMENT_ID/refund" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"amount": 1}'
+# Expected: 422 REFUND_EXCEEDS_REMAINING — the previous refunds
+# already used the full balance.
+```
+
+### 8.4 List and inspect refunds
+
+```bash
+# List refunds for a payment
+curl -s "http://localhost:3000/api/payments/$PAYMENT_ID/refunds" \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+# Fetch one by id
+REFUND_ID=$(curl -s "http://localhost:3000/api/payments/$PAYMENT_ID/refunds" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['id'])")
+
+curl -s "http://localhost:3000/api/refunds/$REFUND_ID" \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+### 8.5 Eligibility rules
+
+- **APPROVED** payment → always refundable (until the original processor window closes, which doesn't apply here — only PENDING has a window).
+- **PENDING** payment → refundable only within `PAYMENT_PENDING_REFUND_WINDOW_MINUTES` (default 5) of `createdAt`.
+- **REJECTED** payment → 409 REFUND_NOT_ELIGIBLE (no money was ever charged).
+
+```bash
+# A REJECTED payment (200 returned the standard shape but status=REJECTED)
+# can't be refunded. 409 conflict, not 422.
+```
+
+### 8.6 Idempotency
+
+Same pattern as the payment endpoint — same `idempotencyKey` returns the same refund row instead of charging twice:
+
+```bash
+KEY=$(python3 -c "import uuid; print(uuid.uuid4())")
+
+curl -X POST "http://localhost:3000/api/payments/$PAYMENT_ID/refund" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"idempotencyKey\":\"$KEY\"}" \
+  | python3 -c "import json,sys; print('first id:', json.load(sys.stdin)['id'])"
+
+# Second call with the SAME key returns the SAME id
+curl -X POST "http://localhost:3000/api/payments/$PAYMENT_ID/refund" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"idempotencyKey\":\"$KEY\"}" \
+  | python3 -c "import json,sys; print('second id:', json.load(sys.stdin)['id'])"
+# Both ids are identical.
+```
+
+### 8.7 Quality gates
+
+```bash
+cd apps/api
+bun run typecheck && bun run lint && bun run format:check
+bun run test    # 175 tests passing
+```
+
+### 8.8 What's not yet wired
+
+- The processor's `/refund` returns the same `processorRef` shape as `/process` but a refund-specific reason enum (REFUND_WINDOW_EXPIRED, ORIGINAL_NOT_FOUND). A future PR could surface these reasons more granularly in the UI.
+- Refund metadata doesn't currently include the processor's audit log (only the `processorRef` pointer). The processor itself keeps the trail.
+- No background job to re-process stuck PENDING refunds (a refund that's been PENDING for >5 min would benefit from a reconciliation task — same as for payments).
+
+---
+
+## 9. Conventions
 
 - **All commits** use [Conventional Commits](https://www.conventionalcommits.org/) in English. No `Co-Authored-By`.
 - **One PR per branch**, squash-merged to `main`. PR description follows the `What / Why / How to test / Checklist / Refs / Commits` template.
