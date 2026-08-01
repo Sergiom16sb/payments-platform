@@ -5,9 +5,10 @@ import { NotFoundException } from '../exceptions/index.js';
 /**
  * Cards repository. Wraps Prisma calls for the Card model.
  *
- * Note: nothing here ever accepts or returns a PAN or CVV — those live
- * only in the tokenization service and are discarded before the row
- * reaches this layer (PLAN §9).
+ * Soft delete (PR #13): rows are never physically removed. `delete()`
+ * sets `deletedAt = now()`; every read filters `deletedAt: null` so the
+ * user-facing API behaves as if the row is gone while the FK from
+ * Payment rows stays intact.
  */
 export class CardsRepository {
   private readonly prisma: PrismaClient;
@@ -38,26 +39,39 @@ export class CardsRepository {
     });
   }
 
+  /** Returns the card if it exists AND has not been soft-deleted. */
   async findById(id: string): Promise<Card | null> {
-    return this.prisma.card.findUnique({ where: { id } });
+    return this.prisma.card.findFirst({
+      where: { id, deletedAt: null },
+    });
   }
 
   async findByToken(token: string): Promise<Card | null> {
-    return this.prisma.card.findUnique({ where: { token } });
+    // Only ACTIVE cards may be charged via their token. A soft-deleted
+    // card's token is no longer usable for new payments.
+    return this.prisma.card.findFirst({
+      where: { token, deletedAt: null },
+    });
   }
 
-  /** Lists all cards owned by the given user, newest first. */
+  /** Lists the user's ACTIVE cards, newest first. */
   async listByUser(userId: string): Promise<Card[]> {
     return this.prisma.card.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  /** Delete a card by id. P2025 -> NotFoundException. */
+  /**
+   * Soft delete: marks deletedAt = now(). P2025 (id not found) or a
+   * record already deleted (treated as no-op for idempotency) -> NotFoundException.
+   */
   async delete(id: string): Promise<void> {
     try {
-      await this.prisma.card.delete({ where: { id } });
+      await this.prisma.card.update({
+        where: { id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
     } catch (err: unknown) {
       if (
         typeof err === 'object' &&
@@ -69,6 +83,19 @@ export class CardsRepository {
       }
       throw err;
     }
+  }
+
+  /**
+   * Restore a previously soft-deleted card (admin/maintenance helper,
+   * not exposed via HTTP in PR #13). Returns true if a row was actually
+   * restored, false if there was no matching deleted row.
+   */
+  async restore(id: string): Promise<boolean> {
+    const result = await this.prisma.card.updateMany({
+      where: { id, NOT: { deletedAt: null } },
+      data: { deletedAt: null },
+    });
+    return result.count > 0;
   }
 }
 

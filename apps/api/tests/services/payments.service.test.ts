@@ -29,6 +29,7 @@ function makeCard(overrides: Partial<Card> = {}): Card {
     token: 'tok_abc',
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
     ...overrides,
   };
 }
