@@ -1,0 +1,333 @@
+{
+  "info": {
+    "name": "Payments Platform",
+    "description": "REST API for the payments-platform technical test. Covers auth (JWT + refresh tokens), card tokenization, payments with idempotency, and the standalone Python processor microservice. Run Auth > Register (or Login) first — the access token is saved automatically for every other request.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "apiUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "processorUrl", "value": "http://localhost:8000", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "cardId", "value": "", "type": "string" },
+    { "key": "paymentId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/auth/register",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice+{{$timestamp}}@example.com\",\n  \"name\": \"Alice Example\",\n  \"password\": \"Secret123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (pm.response.code === 201 && data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "    pm.collectionVariables.set('userId', data.user.id);",
+                  "    console.log('Saved accessToken, refreshToken, userId from register.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/auth/login",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@payments.local\",\n  \"password\": \"Demo1234\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (pm.response.code === 200 && data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "    pm.collectionVariables.set('userId', data.user.id);",
+                  "    console.log('Saved accessToken, refreshToken, userId from login.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/auth/refresh",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "description": "The refresh token can also be sent via the httpOnly cookie set by Register/Login (Postman's cookie jar handles this automatically within the same domain). This request sends it explicitly in the body as a fallback."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (pm.response.code === 200 && data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "    console.log('Rotated: saved new accessToken + refreshToken.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/auth/logout",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cards",
+      "item": [
+        {
+          "name": "Register Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/cards",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "cards"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pan\": \"4111111111111111\",\n  \"cvv\": \"123\",\n  \"expMonth\": 12,\n  \"expYear\": 2030,\n  \"cardholderName\": \"Alice Example\"\n}"
+            },
+            "description": "PAN is a Luhn-valid Visa test number. The response never includes pan or cvv — only last4, brand, and an opaque token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "    pm.collectionVariables.set('cardId', data.id);",
+                  "    console.log('Saved cardId:', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List My Cards",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{apiUrl}}/api/cards",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "cards"]
+            }
+          }
+        },
+        {
+          "name": "Get Card by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{apiUrl}}/api/cards/{{cardId}}",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "cards", "{{cardId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Card",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{apiUrl}}/api/cards/{{cardId}}",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "cards", "{{cardId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/payments",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "payments"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cardId\": \"{{cardId}}\",\n  \"amount\": 49.99,\n  \"currency\": \"USD\"\n}"
+            },
+            "description": "Returns 201 APPROVED (~80%) or 402 REJECTED (~20%) — the processor decides randomly. Add \"idempotencyKey\": \"<uuid>\" to test replay safety: the same key always returns the same payment instead of charging twice."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.id) {",
+                  "    pm.collectionVariables.set('paymentId', data.id);",
+                  "    console.log('Saved paymentId:', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{apiUrl}}/api/payments/{{paymentId}}",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "payments", "{{paymentId}}"]
+            }
+          }
+        },
+        {
+          "name": "List My Payment History",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{apiUrl}}/api/users/{{userId}}/payments?page=1&pageSize=20",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "users", "{{userId}}", "payments"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "status", "value": "APPROVED", "disabled": true },
+                { "key": "from", "value": "2026-01-01T00:00:00.000Z", "disabled": true },
+                { "key": "to", "value": "2026-12-31T00:00:00.000Z", "disabled": true }
+              ]
+            },
+            "description": "Enable the status/from/to query params to filter. status accepts PENDING | APPROVED | REJECTED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Processor",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{processorUrl}}/health",
+              "host": ["{{processorUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Process Payment (direct)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{processorUrl}}/process",
+              "host": ["{{processorUrl}}"],
+              "path": ["process"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": \"manual-test-{{$timestamp}}\",\n  \"amount\": \"49.99\",\n  \"currency\": \"USD\",\n  \"cardToken\": \"tok_manual_test\"\n}"
+            },
+            "description": "Calls the processor microservice directly, bypassing the API — useful to see the raw 80/20 approve/reject distribution without creating real payment rows."
+          }
+        }
+      ]
+    }
+  ]
+}
