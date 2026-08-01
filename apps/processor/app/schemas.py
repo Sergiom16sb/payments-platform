@@ -45,3 +45,34 @@ class ProcessResponse(BaseModel):
     processorRef: str = Field(min_length=1)
     status: PaymentStatus
     reason: RejectionReason | None = None
+
+
+# Reject reasons for /refund (a refund can be declined for different reasons
+# than the original charge).
+class RefundRejectionReason(str, Enum):
+    REFUND_WINDOW_EXPIRED = "REFUND_WINDOW_EXPIRED"
+    ORIGINAL_NOT_FOUND = "ORIGINAL_NOT_FOUND"
+
+
+class RefundRequest(BaseModel):
+    """Body of POST /refund. Mirrors the API's RefundRequestSchema but
+    reuses PaymentStatus for the response status (PENDING/APPROVED/REJECTED).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    refundId: str = Field(min_length=1, max_length=64)
+    paymentId: str = Field(min_length=1, max_length=64)
+    amount: Decimal = Field(gt=Decimal("0"), max_digits=12, decimal_places=2)
+    currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+
+
+class RefundResponse(BaseModel):
+    """Response of POST /refund. Same shape as ProcessResponse but with
+    an extra `reason` enum covering refund-specific declines."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    processorRef: str = Field(min_length=1)
+    status: PaymentStatus
+    reason: RefundRejectionReason | None = None
