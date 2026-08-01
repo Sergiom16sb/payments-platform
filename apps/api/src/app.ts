@@ -18,6 +18,8 @@ import {
 import { getEnv } from './config/env.js';
 import authGuardPlugin from './plugins/auth-guard.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
+import requireRolePlugin from './plugins/require-role.js';
+import adminRoutes from './routes/admin.routes.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { cardsRoutes } from './routes/cards.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
@@ -108,12 +110,17 @@ export async function buildApp(
   // inside registerPlugins) so the decoration is visible everywhere.
   await app.register(authGuardPlugin);
 
+  // require-role exposes `app.requireRole(role)` on the root. Same
+  // fp()-wrapped plugin, same root-registration reasoning.
+  await app.register(requireRolePlugin);
+
   // Domain routes (registered manually rather than via @fastify/autoload
   // so we don't depend on directory contents that may be empty).
   await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(cardsRoutes, { prefix: '/api/cards' });
   await app.register(paymentsRoutes, { prefix: '/api' });
+  await app.register(adminRoutes, { prefix: '/api/admin' });
 
   return app;
 }
