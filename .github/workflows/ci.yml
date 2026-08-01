@@ -84,10 +84,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: '0.4.4'
+          python-version: '3.13'
           enable-cache: true
           cache-dependency-glob: |
-            uv.lock
-            pyproject.toml
+            apps/processor/uv.lock
+            apps/processor/pyproject.toml
       - name: Install deps
         run: uv sync --frozen
       - name: Lint (ruff)
