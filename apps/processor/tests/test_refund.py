@@ -4,23 +4,23 @@ from __future__ import annotations
 
 import os
 from collections import Counter
-from decimal import Decimal
 
 # Speed up retries in the test env (otherwise a 503 test sleeps a lot).
 os.environ.setdefault("PROCESSOR_ERROR_RATE", "0")
-# /process and /refund share PROCESSOR_APPROVE_RATIO; use a high value
-# here so the refund distribution is essentially always APPROVED, making
-# the few REJECTED-path tests below deterministic via monkeypatching.
-os.environ.setdefault("PROCESSOR_APPROVE_RATIO", "1")
+# NOTE: setting PROCESSOR_APPROVE_RATIO here has no effect on approve_ratio
+# — app.config.settings is a module-level frozen dataclass computed at
+# import time, and whichever test module pytest collects first (e.g.
+# test_processor.py, which doesn't set this env var) has already frozen it
+# to the real default (0.8) by the time this file's env var is read. Tests
+# that need a specific ratio must monkeypatch config.settings.approve_ratio
+# directly, like the other tests in this file already do.
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.processor import process_refund
 from app.schemas import (
     RefundRejectionReason,
-    RefundRequest,
     RefundResponse,
 )
 
@@ -37,12 +37,19 @@ def _valid_request() -> dict:
 
 
 def test_refund_request_validates_required_fields() -> None:
-    r = client.post("/refund", json=_valid_request())
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["status"] == "APPROVED"
-    assert body["processorRef"]
-    assert body["reason"] is None
+    from app import config
+
+    original = config.settings.approve_ratio
+    object.__setattr__(config.settings, "approve_ratio", 1.0)  # always approve
+    try:
+        r = client.post("/refund", json=_valid_request())
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "APPROVED"
+        assert body["processorRef"]
+        assert body["reason"] is None
+    finally:
+        object.__setattr__(config.settings, "approve_ratio", original)
 
 
 def test_refund_request_rejects_missing_refund_id() -> None:
