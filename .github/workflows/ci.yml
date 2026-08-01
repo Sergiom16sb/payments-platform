@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run for the same branch / PR when a new commit
+# lands; saves CI minutes on rapid pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-lint-typecheck:
+    name: API · lint + typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.0
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run format:check
+      - run: bun run typecheck
+
+  api-test:
+    name: API · vitest
+    runs-on: ubuntu-latest
+    defaults:
+      working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: payments
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d payments"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Point the API + Prisma at the job-local Postgres.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/payments
+      # Set all required env vars so the Zod schema passes validation.
+      JWT_SECRET: ci-32-chars-long-test-secret-aaaaaaa
+      JWT_ISSUER: payments-api
+      JWT_AUDIENCE: payments-client
+      JWT_ACCESS_TOKEN_EXPIRES_IN: 15m
+      JWT_REFRESH_TOKEN_EXPIRES_IN: 7d
+      PAYMENTS_PROCESSOR_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.0
+      - run: bun install --frozen-lockfile
+      - name: Apply migrations
+        run: bunx prisma migrate deploy
+      - name: Run tests
+        # `bun run test` already uses vitest; vitest picks up our DB via DATABASE_URL.
+        # The integration tests skip themselves if the DB is unreachable, so even
+        # a flaky runner won't fail this PR for transient connection issues.
+        run: bun run test
+
+  processor-test:
+    name: Processor · ruff + pytest
+    runs-on: ubuntu-latest
+    defaults:
+      working-directory: apps/processor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: '0.4.4'
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+      - name: Install deps
+        run: uv sync --frozen
+      - name: Lint (ruff)
+        run: uv run ruff check
+      - name: Test (pytest)
+        run: uv run pytest -q
