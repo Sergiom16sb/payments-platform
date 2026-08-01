@@ -130,6 +130,83 @@ export class PaymentsProcessorClient {
       )
     );
   }
+
+  /**
+   * Calls POST /refund. Same retry/timeout policy as process(). The
+   * request and response schemas (ProcessorRefundRequestSchema /
+   * ProcessorRefundResponseSchema) live in dto/payments/refunds.schemas.ts.
+   */
+  async processRefund(
+    input: import('../dto/payments/refunds.schemas.js').ProcessorRefundRequest
+  ): Promise<
+    import('../dto/payments/refunds.schemas.js').ProcessorRefundResponse
+  > {
+    // Lazy import to keep this file from pulling the refund schemas when
+    // only /process is used (some test setups don't have Refund loaded).
+    const { ProcessorRefundRequestSchema, ProcessorRefundResponseSchema } =
+      await import('../dto/payments/refunds.schemas.js');
+    const body = ProcessorRefundRequestSchema.parse(input);
+    const url = `${this.baseUrl.replace(/\/$/, '')}/refund`;
+
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        await sleep(RETRY_DELAYS_MS[attempt - 1] ?? 3200);
+      }
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+
+        if (res.status === 503) {
+          lastError = new ServiceUnavailableException(
+            'Payment processor is temporarily unavailable',
+            'PROCESSOR_UNAVAILABLE'
+          );
+          continue;
+        }
+        if (!res.ok) {
+          throw new BadGatewayException(
+            `Processor returned unexpected status ${res.status}`,
+            'PROCESSOR_BAD_RESPONSE'
+          );
+        }
+        const json: unknown = await res.json();
+        return ProcessorRefundResponseSchema.parse(json);
+      } catch (err: unknown) {
+        clearTimeout(timer);
+        if (err instanceof BadGatewayException) throw err;
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          lastError = new GatewayTimeoutException(
+            'Payment processor did not respond in time',
+            'PROCESSOR_TIMEOUT'
+          );
+          continue;
+        }
+        lastError = new ServiceUnavailableException(
+          'Could not reach the payment processor',
+          'PROCESSOR_UNREACHABLE'
+        );
+      }
+    }
+
+    throw (
+      lastError ??
+      new ServiceUnavailableException(
+        'Payment processor is temporarily unavailable',
+        'PROCESSOR_UNAVAILABLE'
+      )
+    );
+  }
 }
 
 let _default: PaymentsProcessorClient | undefined;
