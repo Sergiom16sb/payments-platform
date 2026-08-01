@@ -59,6 +59,15 @@ const envSchema = z.object({
     .positive()
     .default(5000),
   PAYMENTS_PROCESSOR_MAX_RETRIES: z.coerce.number().int().min(0).default(3),
+  // Window in minutes during which a PENDING payment is still refundable
+  // (the processor never responded). After this, refunds on PENDING
+  // payments are rejected with 409 — the original status must be either
+  // APPROVED or PENDING within this window.
+  PAYMENT_PENDING_REFUND_WINDOW_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(5),
 
   CORS_ORIGINS: csv,
 });
