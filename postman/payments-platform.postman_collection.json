@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Payments Platform",
-    "description": "REST API for the payments-platform technical test. Covers auth (JWT + refresh tokens), card tokenization, payments with idempotency, and the standalone Python processor microservice. Run Auth > Register (or Login) first — the access token is saved automatically for every other request.",
+    "description": "REST API for the payments-platform technical test. Covers auth (JWT + refresh tokens), card tokenization, payments with idempotency, the standalone Python processor microservice, and admin operations (restore soft-deleted cards). Run Auth > Register (or Login) first — the access token is saved automatically. For Admin requests, run the dedicated Admin > Login as admin once to populate {{adminToken}}.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -17,7 +17,8 @@
     { "key": "refreshToken", "value": "", "type": "string" },
     { "key": "userId", "value": "", "type": "string" },
     { "key": "cardId", "value": "", "type": "string" },
-    { "key": "paymentId", "value": "", "type": "string" }
+    { "key": "paymentId", "value": "", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" }
   ],
   "item": [
     {
@@ -325,6 +326,67 @@
               "raw": "{\n  \"paymentId\": \"manual-test-{{$timestamp}}\",\n  \"amount\": \"49.99\",\n  \"currency\": \"USD\",\n  \"cardToken\": \"tok_manual_test\"\n}"
             },
             "description": "Calls the processor microservice directly, bypassing the API — useful to see the raw 80/20 approve/reject distribution without creating real payment rows."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          { "key": "token", "value": "{{adminToken}}", "type": "string" }
+        ]
+      },
+      "item": [
+        {
+          "name": "Login as admin",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/auth/login",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@payments.local\",\n  \"password\": \"Admin1234\"\n}"
+            },
+            "description": "Uses the seeded admin@payments.local credentials (password Admin1234 — see apps/api/prisma/seed.ts). If the seed was never run, promote any user to role=ADMIN in the DB first: `UPDATE users SET role='ADMIN' WHERE email='...';` then login with that email here. The test script saves the resulting token to {{adminToken}}, which every other Admin request uses."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (pm.response.code === 200 && data.accessToken) {",
+                  "    pm.collectionVariables.set('adminToken', data.accessToken);",
+                  "    console.log('Saved adminToken (role=' + data.user.role + ').');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/admin/cards/{{cardId}}/restore",
+              "host": ["{{apiUrl}}"],
+              "path": ["api", "admin", "cards", "{{cardId}}", "restore"]
+            },
+            "description": "Reverses a soft-delete (PR #13): bring a soft-deleted card back. Requires role: ADMIN on the {{adminToken}} — the Admin > Login request above populates that. Returns 200 with the restored card on success, 404 CARD_NOT_FOUND if the id doesn't exist, 401/403 if auth is missing or role is wrong."
           }
         }
       ]
