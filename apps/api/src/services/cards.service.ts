@@ -113,6 +113,41 @@ export class CardsService {
     await this.getOwned(id, userId);
     await this.cards.delete(id);
   }
+
+  /**
+   * Admin operation: clear deletedAt on a soft-deleted card so it becomes
+   * visible and usable again. The route layer is expected to gate this
+   * behind requireRole('ADMIN') — this method does NOT check ownership.
+   * Returns the restored card. 404 if the id doesn't exist at all.
+   * Idempotent: restoring an already-active card returns it as-is.
+   */
+  async adminRestore(id: string): Promise<Card> {
+    // First look it up INCLUDING soft-deleted rows (admin sees everything).
+    const deleted = await this.cards.findByIdIncludingDeleted(id);
+    if (!deleted) {
+      throw new NotFoundException(`Card ${id} not found`, 'CARD_NOT_FOUND');
+    }
+    if (deleted.deletedAt === null) {
+      // Already active — idempotent.
+      return deleted;
+    }
+    const restored = await this.cards.restore(id);
+    if (!restored) {
+      // Race: another admin restored between our find and restore.
+      // The row is now active; re-fetch and return.
+      const fresh = await this.cards.findById(id);
+      if (!fresh) {
+        throw new NotFoundException(`Card ${id} not found`, 'CARD_NOT_FOUND');
+      }
+      return fresh;
+    }
+    // Re-fetch the now-active row to return its current state.
+    const after = await this.cards.findById(id);
+    if (!after) {
+      throw new NotFoundException(`Card ${id} not found`, 'CARD_NOT_FOUND');
+    }
+    return after;
+  }
 }
 
 let _default: CardsService | undefined;
