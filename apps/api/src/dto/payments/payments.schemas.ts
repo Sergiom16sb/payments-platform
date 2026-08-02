@@ -7,7 +7,7 @@ import {
 } from '../../schemas/primitives.js';
 
 /**
- * Payment request/response schemas (PLAN §7, §9, §10).
+ * Payment request/response schemas.
  *
  * The processor client schemas (ProcessorRequestSchema/ProcessorResponseSchema)
  * live in this file too because they share the same domain vocabulary
@@ -28,7 +28,6 @@ export const CreatePaymentRequestSchema = z.object({
 
 export type CreatePaymentRequest = z.infer<typeof CreatePaymentRequestSchema>;
 
-/** Payment as returned to clients. */
 export const PaymentResponseSchema = z.object({
   id: z.string(),
   userId: z.string(),
@@ -44,7 +43,6 @@ export const PaymentResponseSchema = z.object({
 
 export type PaymentResponse = z.infer<typeof PaymentResponseSchema>;
 
-/** GET /api/users/:id/payments — query params. */
 export const PaymentQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

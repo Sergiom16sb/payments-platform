@@ -11,7 +11,7 @@ import {
 } from '../exceptions/index.js';
 
 /**
- * HTTP client for the Python payment-processor microservice (PLAN §8, §19.4).
+ * HTTP client for the Python payment-processor microservice.
  *
  * Contract enforcement:
  *   - REQUEST is validated with ProcessorRequestSchema before sending.
@@ -19,7 +19,7 @@ import {
  *   - A Zod failure on either side throws InternalServerErrorException
  *     upstream (from the caller) — that's a contract bug, not a client bug.
  *
- * Retry policy (per PLAN §19 checklist): exponential backoff
+ * Retry policy: exponential backoff
  * 200ms, 800ms, 3200ms — max 3 attempts total. Only retries on:
  *   - HTTP 503 (processor overloaded, matches processor's simulated error rate)
  *   - fetch() network errors / timeout
@@ -91,7 +91,7 @@ export class PaymentsProcessorClient {
             'Payment processor is temporarily unavailable',
             'PROCESSOR_UNAVAILABLE'
           );
-          continue; // retry
+          continue;
         }
 
         if (!res.ok) {
@@ -112,7 +112,7 @@ export class PaymentsProcessorClient {
             'Payment processor did not respond in time',
             'PROCESSOR_TIMEOUT'
           );
-          continue; // retry
+          continue;
         }
         // Network error (connection refused, DNS, etc.) — retry.
         lastError = new ServiceUnavailableException(

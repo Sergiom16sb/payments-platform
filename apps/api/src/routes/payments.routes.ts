@@ -8,12 +8,11 @@ import {
 import { IdSchema } from '../schemas/index.js';
 
 /**
- * Payments routes (PLAN §7). All routes require an authenticated user.
+ * Payments routes. All routes require an authenticated user.
  * Mounted under /api by app.ts so both /api/payments and
  * /api/users/:id/payments resolve correctly.
  */
 export async function paymentsRoutes(app: FastifyInstance): Promise<void> {
-  // POST /api/payments — create + process a payment
   app.post('/payments', {
     preHandler: app.authenticate,
     schema: {
@@ -23,7 +22,6 @@ export async function paymentsRoutes(app: FastifyInstance): Promise<void> {
     handler: paymentsController.create,
   });
 
-  // GET /api/payments/:id — fetch one payment (owner only)
   app.get<{ Params: { id: string } }>('/payments/:id', {
     preHandler: app.authenticate,
     schema: {
@@ -33,7 +31,6 @@ export async function paymentsRoutes(app: FastifyInstance): Promise<void> {
     handler: paymentsController.getOne,
   });
 
-  // GET /api/users/:id/payments — paginated history (owner only in this scope)
   app.get<{ Params: { id: string }; Querystring: unknown }>(
     '/users/:id/payments',
     {

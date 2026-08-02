@@ -8,7 +8,7 @@ import {
 import { IdSchema } from '../schemas/index.js';
 
 /**
- * Refund routes (PLAN §7 + PR #16). All routes require authentication
+ * Refund routes. All routes require authentication
  * (preHandler: app.authenticate). Ownership is checked inside the
  * service via the existing payments.getOwned() — no new auth surface.
  *

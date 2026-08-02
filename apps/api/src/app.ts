@@ -31,7 +31,6 @@ export interface BuildAppOptions {
 }
 
 const registerPlugins: FastifyPluginAsync = async (app) => {
-  // Sensible: default HTTP error helpers (httpErrors.notFound, etc.)
   await app.register(sensible);
 
   // Helmet: default security headers. CSP disabled because Swagger UI
@@ -44,13 +43,11 @@ const registerPlugins: FastifyPluginAsync = async (app) => {
     credentials: true,
   });
 
-  // Rate limit: global default; specific routes can override per-PR.
   await app.register(rateLimit, {
     max: 100,
     timeWindow: '15 minutes',
   });
 
-  // Swagger (JSON spec generation) + Swagger UI.
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',

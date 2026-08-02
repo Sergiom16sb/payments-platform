@@ -8,7 +8,7 @@ import {
 } from '../dto/auth/auth.schemas.js';
 
 /**
- * Auth routes (PLAN §7). Mounted under /api/auth by app.ts.
+ * Auth routes. Mounted under /api/auth by app.ts.
  *
  * Validation: Fastify + fastify-type-provider-zod run the Zod schemas
  * against body/response, producing typed req.body and serializing the

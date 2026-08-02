@@ -2,7 +2,7 @@ import { CardBrand } from '@prisma/client';
 import { z } from 'zod';
 
 /**
- * Card request/response schemas (PLAN §7, §9, §10).
+ * Card request/response schemas.
  *
  * Request takes the FULL PAN + CVV (so we can tokenize) — but only the
  * token + last4 ever live in the database or in responses.
@@ -14,7 +14,6 @@ const PanSchema = z
 
 const CvvSchema = z.string().regex(/^\d{3,4}$/, 'CVV must be 3 or 4 digits');
 
-/** POST /api/cards — input */
 export const CreateCardRequestSchema = z.object({
   pan: PanSchema,
   cvv: CvvSchema,

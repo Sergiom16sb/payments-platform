@@ -23,7 +23,7 @@ import {
 /**
  * Auth service. Orchestrates registration, login, refresh, and logout.
  *
- * Rules (PLAN §7, §9):
+ * Rules:
  *  - Registration: hash password, create user. Email uniqueness is
  *    enforced by the repository (P2002 -> ConflictException).
  *  - Login: lookup by email, verify bcrypt hash. Both wrong-email and
@@ -131,7 +131,6 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User no longer exists', 'USER_GONE');
     }
-    // Rotate: revoke old, issue new.
     await this.refreshTokens.revoke(stored.id);
     return this.issueTokens(user);
   }

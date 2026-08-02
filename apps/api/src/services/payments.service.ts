@@ -16,17 +16,17 @@ import {
 } from './payments-processor.client.js';
 
 /**
- * Payments service (PLAN §7, §9, §10). Orchestrates:
+ * Payments service. Orchestrates:
  *
  *   1. Idempotency check — if idempotencyKey was already used, return the
- *      EXISTING payment instead of creating a new one (PLAN §10: "misma
- *      clave -> mismo pago"). No re-charge, no processor call.
+ *      EXISTING payment instead of creating a new one. No re-charge, no
+ *      processor call.
  *   2. Card ownership check — the card must belong to the requesting user
  *      (403 NOT_CARD_OWNER, reusing the same check as cards.service).
  *   3. Create a PENDING payment row (idempotencyKey uniqueness is the
  *      final DB-level guard against a race between two concurrent
  *      requests with the same key).
- *   4. Call the processor with the card's TOKEN — never the PAN (PLAN §9).
+ *   4. Call the processor with the card's TOKEN — never the PAN.
  *   5. Update the payment to APPROVED or REJECTED based on the processor
  *      response. A REJECTED processor result maps to a 402 exception,
  *      but the payment row is still persisted as REJECTED (so it shows

@@ -24,7 +24,7 @@ export const CurrencySchema = z
   .length(3)
   .regex(/^[A-Z]{3}$/, 'currency must be a 3-letter ISO code');
 
-/** Money amount as a number. Plan §10 rules: positive, 2 decimals, <= 1M. */
+/** Money amount as a number: positive, 2 decimals, <= 1M. */
 export const AmountSchema = z
   .number()
   .positive()

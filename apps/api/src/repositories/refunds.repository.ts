@@ -76,7 +76,6 @@ export class RefundsRepository {
     });
   }
 
-  /** Lists refunds for a payment, newest first. */
   async listByPayment(paymentId: string): Promise<Refund[]> {
     return this.prisma.refund.findMany({
       where: { paymentId },
@@ -84,7 +83,6 @@ export class RefundsRepository {
     });
   }
 
-  /** Ensures a refund exists; throws NotFoundException otherwise. */
   async getOrThrow(id: string): Promise<Refund> {
     const refund = await this.findById(id);
     if (!refund) {

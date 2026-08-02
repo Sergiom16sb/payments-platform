@@ -6,7 +6,7 @@ import {
 } from '../../schemas/primitives.js';
 
 /**
- * Refund request/response schemas (PR #16).
+ * Refund request/response schemas.
  *
  * Refunds are tied 1..N to a Payment. Partial refunds are allowed —
  * `amount` defaults to the full payment amount if omitted, but the
@@ -22,7 +22,6 @@ export const RefundRejectionReasonSchema = z.enum([
   'ORIGINAL_NOT_FOUND',
 ]);
 
-/** POST /api/payments/:id/refund — input. */
 export const CreateRefundRequestSchema = z.object({
   amount: AmountSchema.optional(),
   reason: z.string().max(500).optional(),
@@ -31,7 +30,6 @@ export const CreateRefundRequestSchema = z.object({
 
 export type CreateRefundRequest = z.infer<typeof CreateRefundRequestSchema>;
 
-/** Refund as returned to clients. */
 export const RefundResponseSchema = z.object({
   id: z.string(),
   paymentId: z.string(),

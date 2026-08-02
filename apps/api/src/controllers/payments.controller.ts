@@ -67,9 +67,7 @@ export const paymentsController = {
   ): Promise<unknown> {
     const requesterId = userIdFrom(req);
     if (req.params.id !== requesterId) {
-      // Authenticated but not authorized for someone else's payment
-      // history — 403, not 401 (matches PLAN §7 owner/admin semantics;
-      // admin bypass deferred, no admin routes exist yet in this scope).
+      // Authenticated but not authorized for someone else's payment history — 403, not 401.
       throw new ForbiddenException(
         'You can only list your own payments',
         'NOT_SELF'
