@@ -1,5 +1,7 @@
 # Payments Platform
 
+[![CI](https://github.com/Sergiom16sb/payments-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Sergiom16sb/payments-platform/actions/workflows/ci.yml)
+
 A REST payments system: users register, tokenize credit cards, and create
 payments that are approved or rejected by an independent mock payment
 processor.
