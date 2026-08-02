@@ -3,7 +3,7 @@ import { getPrisma } from '../config/database.js';
 
 /**
  * Refresh tokens repository. Persists refresh-token metadata so logout
- * can revoke and `refresh` can detect reuse of revoked tokens (PLAN §9).
+ * can revoke and `refresh` can detect reuse of revoked tokens.
  *
  * Security notes:
  *  - We persist the SHA-256 hash of the raw token, never the raw value.

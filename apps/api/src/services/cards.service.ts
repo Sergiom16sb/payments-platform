@@ -12,7 +12,7 @@ import {
 } from '../repositories/cards.repository.js';
 
 /**
- * Card tokenization service (PLAN §9, §10).
+ * Card tokenization service.
  *
  * The flow:
  *   1. Validate Luhn on the PAN.
@@ -92,9 +92,6 @@ export class CardsService {
   async getOwned(id: string, userId: string): Promise<Card> {
     const card = await this.cards.findById(id);
     if (!card) {
-      // NotFoundException -> 404 CARD_NOT_FOUND. (Was BadRequestException
-      // -> 400 before PR #13; the soft-delete change made this path much
-      // more reachable so the fix is part of this PR.)
       throw new NotFoundException(`Card ${id} not found`, 'CARD_NOT_FOUND');
     }
     if (card.userId !== userId) {
@@ -141,7 +138,6 @@ export class CardsService {
       }
       return fresh;
     }
-    // Re-fetch the now-active row to return its current state.
     const after = await this.cards.findById(id);
     if (!after) {
       throw new NotFoundException(`Card ${id} not found`, 'CARD_NOT_FOUND');

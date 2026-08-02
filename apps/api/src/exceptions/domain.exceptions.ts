@@ -4,8 +4,6 @@ import { HttpException } from './http.exception.js';
  * 409 — a payment request was made with an idempotency key that has
  * already been used (successfully or not). Lets the client distinguish
  * "retry safely" from "duplicated, abort".
- *
- * Used in PR #11 (payments).
  */
 export class IdempotencyConflictException extends HttpException {
   constructor(
@@ -20,8 +18,6 @@ export class IdempotencyConflictException extends HttpException {
 /**
  * 402 — payment processor rejected the charge (insufficient funds, expired,
  * fraud-suspected, etc.). Distinct from 503 (processor unavailable).
- *
- * Used in PR #11 (payments) when the processor returns status=REJECTED.
  */
 export class PaymentRequiredException extends HttpException {
   constructor(

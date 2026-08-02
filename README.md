@@ -128,6 +128,12 @@ Success responses return the resource directly (no wrapper).
 | GET | `/api/payments/:id/refunds` | — | 200 list of refunds for the payment |
 | GET | `/api/refunds/:id` | — | 200 single refund, owner-checked via the parent payment |
 
+### Admin (`/api/admin`) — requires Bearer auth + `ADMIN` role
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| POST | `/cards/:id/restore` | — | 200. Restores a soft-deleted card (clears `deletedAt`). Idempotent — restoring an already-active card is a no-op. 403 for non-`ADMIN` callers |
+
 ### Processor (separate service, port 8000) — no auth, internal only
 
 | Method | Path | Body | Notes |
@@ -139,6 +145,45 @@ Success responses return the resource directly (no wrapper).
 
 ```
 http://localhost:3000/api-docs
+```
+
+## Roles & Access (RBAC)
+
+| Role | Access |
+|---|---|
+| `USER` | Default role on register. Manages their own cards, payments, and refunds — never another user's. |
+| `ADMIN` | Everything a `USER` can do, plus `POST /api/admin/cards/:id/restore`. Granted manually (`UPDATE users SET role='ADMIN'`) — there's no self-service promotion endpoint. |
+
+A JWT's `role` claim is fixed at issuance — if a user's role changes in the DB, they must log in again to get a token reflecting it.
+
+## Standard response format
+
+Success responses return the resource directly, with no wrapper:
+
+```json
+{ "id": "cl123", "email": "demo@payments.local", "name": "Demo" }
+```
+
+Errors always use the same envelope:
+
+```json
+{
+  "success": false,
+  "error": {
+    "message": "Validation failed",
+    "code": "VALIDATION_ERROR",
+    "fields": [{ "field": "email", "message": "Invalid email" }]
+  }
+}
+```
+
+Paginated list responses (`GET /api/users/:id/payments`):
+
+```json
+{
+  "data": [ { "id": "pay_1", "amount": "49.99", "status": "APPROVED" } ],
+  "meta": { "page": 1, "pageSize": 20, "total": 1, "totalPages": 1 }
+}
 ```
 
 ## Security notes (the "plus" features)
@@ -211,8 +256,3 @@ postman/
   payments-platform.postman_collection.json
 docker-compose.yml
 ```
-
-## Git workflow
-
-Feature branches, squash-merged to `main`, Conventional Commits throughout.
-See `docs/TESTING.md` for the roadmap of what each PR introduced.

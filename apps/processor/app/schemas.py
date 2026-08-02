@@ -1,4 +1,4 @@
-"""Pydantic schemas for the /process endpoint (PLAN §8).
+"""Pydantic schemas for the /process endpoint.
 
 Request: paymentId, amount (Decimal), currency (3-letter ISO), cardToken.
 Response: processorRef (uuid4 hex), status (APPROVED|REJECTED),
@@ -18,7 +18,7 @@ class PaymentStatus(StrEnum):
     REJECTED = "REJECTED"
 
 
-# Rejection reasons per PLAN §8 (mirrors what Stripe-like processors return).
+# Rejection reasons (mirrors what Stripe-like processors return).
 class RejectionReason(StrEnum):
     INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS"
     EXPIRED = "EXPIRED"

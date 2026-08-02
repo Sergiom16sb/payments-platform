@@ -5,7 +5,7 @@ import { NotFoundException } from '../exceptions/index.js';
 /**
  * Cards repository. Wraps Prisma calls for the Card model.
  *
- * Soft delete (PR #13): rows are never physically removed. `delete()`
+ * Soft delete: rows are never physically removed. `delete()`
  * sets `deletedAt = now()`; every read filters `deletedAt: null` so the
  * user-facing API behaves as if the row is gone while the FK from
  * Payment rows stays intact.
@@ -63,7 +63,6 @@ export class CardsRepository {
     });
   }
 
-  /** Lists the user's ACTIVE cards, newest first. */
   async listByUser(userId: string): Promise<Card[]> {
     return this.prisma.card.findMany({
       where: { userId, deletedAt: null },

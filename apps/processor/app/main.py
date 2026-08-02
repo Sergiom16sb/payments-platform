@@ -29,7 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Captured at import time so /health can report uptime.
 _app_started = time.time()
 
 app = FastAPI(

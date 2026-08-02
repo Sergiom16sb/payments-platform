@@ -8,7 +8,7 @@ import {
 import { IdSchema } from '../schemas/index.js';
 
 /**
- * Cards routes (PLAN §7). All routes require an authenticated user
+ * Cards routes. All routes require an authenticated user
  * (preHandler: app.authenticate) — cards are private to each user.
  *
  * Validation via Zod schemas; serialization via CardResponseSchema (no
@@ -20,7 +20,6 @@ import { IdSchema } from '../schemas/index.js';
  * which is applied globally by the error handler.
  */
 export async function cardsRoutes(app: FastifyInstance): Promise<void> {
-  // POST /api/cards — register a new card
   app.post('/', {
     preHandler: app.authenticate,
     schema: {
@@ -30,7 +29,6 @@ export async function cardsRoutes(app: FastifyInstance): Promise<void> {
     handler: cardsController.create,
   });
 
-  // GET /api/cards — list the current user's cards
   app.get('/', {
     preHandler: app.authenticate,
     schema: {
@@ -39,7 +37,6 @@ export async function cardsRoutes(app: FastifyInstance): Promise<void> {
     handler: cardsController.list,
   });
 
-  // GET /api/cards/:id — fetch one card (with ownership check)
   app.get<{ Params: { id: string } }>('/:id', {
     preHandler: app.authenticate,
     schema: {
@@ -49,7 +46,6 @@ export async function cardsRoutes(app: FastifyInstance): Promise<void> {
     handler: cardsController.getOne,
   });
 
-  // DELETE /api/cards/:id — delete one card (with ownership check)
   app.delete<{ Params: { id: string } }>('/:id', {
     preHandler: app.authenticate,
     schema: {

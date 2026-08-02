@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { EmailSchema } from '../../schemas/primitives.js';
 
 /**
- * Auth request/response schemas (PLAN §7).
+ * Auth request/response schemas.
  *
- * Password rule (PLAN §10): min 8 chars, at least one upper, one lower,
+ * Password rule: min 8 chars, at least one upper, one lower,
  * one digit. Enforced by the strong-password refinement.
  */
 
@@ -16,7 +16,6 @@ const PasswordSchema = z
   .refine((v) => /[a-z]/.test(v), 'password must contain a lowercase letter')
   .refine((v) => /\d/.test(v), 'password must contain a digit');
 
-/** POST /api/auth/register */
 export const RegisterRequestSchema = z.object({
   email: EmailSchema,
   name: z.string().min(2).max(100),
@@ -25,7 +24,6 @@ export const RegisterRequestSchema = z.object({
 
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 
-/** POST /api/auth/login */
 export const LoginRequestSchema = z.object({
   email: EmailSchema,
   password: z.string().min(1).max(128),

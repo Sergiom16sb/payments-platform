@@ -1,4 +1,4 @@
-"""Mock payment processor logic (PLAN §8).
+"""Mock payment processor logic.
 
 Behavior:
   - 80% (configurable via PROCESSOR_APPROVE_RATIO) -> APPROVED
@@ -36,7 +36,6 @@ async def process_payment(req: ProcessRequest) -> ProcessResponse:
     (used by the API client to test its retry logic).
     """
 
-    # 1) Simulated latency so the API exercises realistic timeouts.
     if settings.max_latency_ms > settings.min_latency_ms:
         span = settings.max_latency_ms - settings.min_latency_ms
         delay_ms = settings.min_latency_ms + random.randint(0, span)
@@ -44,14 +43,12 @@ async def process_payment(req: ProcessRequest) -> ProcessResponse:
         delay_ms = settings.min_latency_ms
     await asyncio.sleep(delay_ms / 1000)
 
-    # 2) Occasional 503 to test client retry.
     if settings.error_rate > 0 and random.random() < settings.error_rate:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="processor temporarily unavailable",
         )
 
-    # 3) APPROVED vs REJECTED.
     if random.random() < settings.approve_ratio:
         return ProcessResponse(
             processorRef=uuid.uuid4().hex,

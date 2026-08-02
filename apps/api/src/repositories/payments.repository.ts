@@ -116,7 +116,6 @@ export class PaymentsRepository {
     return { data, total };
   }
 
-  /** Ensures the payment exists, throwing NotFoundException otherwise. */
   async getOrThrow(id: string): Promise<Payment> {
     const payment = await this.findById(id);
     if (!payment) {

@@ -21,7 +21,7 @@ import {
 } from './payments-processor.client.js';
 
 /**
- * Refund service (PR #16).
+ * Refund service.
  *
  * Flow (mirrors payments.service.ts):
  *   1. Idempotency check — if the key was already used, return the
@@ -62,7 +62,6 @@ export class RefundsService {
   }): Promise<Refund> {
     const idempotencyKey = input.idempotencyKey ?? randomUUID();
 
-    // 1. Idempotency pre-check.
     const existing = await this.refunds.findByIdempotencyKey(idempotencyKey);
     if (existing) {
       if (existing.paymentId !== input.paymentId) {
@@ -74,13 +73,10 @@ export class RefundsService {
       return existing;
     }
 
-    // 2. Ownership check via the existing payments service.
     const payment = await this.payments.getOwned(input.paymentId, input.userId);
 
-    // 3. Eligibility.
     this.assertRefundable(payment);
 
-    // 4. Amount defaulting + over-refund check.
     const alreadyRefundedOrPending = await this.refunds.sumActiveForPayment(
       payment.id
     );
@@ -105,7 +101,6 @@ export class RefundsService {
       );
     }
 
-    // 5. Create the PENDING row.
     const refund = await this.refunds.create({
       paymentId: payment.id,
       amount: requested.toFixed(2),
@@ -114,7 +109,6 @@ export class RefundsService {
       idempotencyKey,
     });
 
-    // 6. Call the processor.
     const result = await this.processor.processRefund({
       refundId: refund.id,
       paymentId: payment.id,
@@ -122,7 +116,6 @@ export class RefundsService {
       currency: payment.currency,
     });
 
-    // 7. Mark resolved (APPROVED or REJECTED — never throws on REJECTED).
     const resolved = await this.refunds.markResolved(refund.id, {
       status: result.status,
       processorRef: result.processorRef,
@@ -147,7 +140,6 @@ export class RefundsService {
    */
   async getOwned(refundId: string, userId: string): Promise<Refund> {
     const refund = await this.refunds.getOrThrow(refundId);
-    // Reuse the payments ownership check by reading the parent.
     await this.payments.getOwned(refund.paymentId, userId);
     return refund;
   }

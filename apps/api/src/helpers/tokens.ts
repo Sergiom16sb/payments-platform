@@ -42,14 +42,14 @@ function refreshSecret(): Uint8Array {
 }
 
 export interface AccessTokenPayload {
-  sub: string; // user id
+  sub: string;
   email: string;
   role: 'USER' | 'ADMIN';
   typ: 'access';
 }
 
 export interface RefreshTokenPayload {
-  sub: string; // user id
+  sub: string;
   jti: string; // unique id (also the random suffix of the raw token)
   typ: 'refresh';
 }
