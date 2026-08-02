@@ -2,8 +2,7 @@
 
 A REST payments system: users register, tokenize credit cards, and create
 payments that are approved or rejected by an independent mock payment
-processor. Built as a technical test submission, with several production-grade
-additions ("plus" features) beyond the minimum spec.
+processor.
 
 ## Stack
 
